@@ -312,6 +312,9 @@ fork(void)
 
   pid = np->pid;
 
+  //copy trace mask from parent to child
+  np->tmask = p->tmask;
+
   release(&np->lock);
 
   acquire(&wait_lock);
@@ -680,4 +683,22 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+// Return number of processes wohse state is UNUSED
+void
+inusedproc(uint64* result)
+{
+  struct proc *p;
+  int inused_proc_cnt=0;
+
+  for(p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if(p->state != UNUSED) {
+      ++inused_proc_cnt;
+    }
+    release(&p->lock);
+  }
+
+  *result=inused_proc_cnt;
 }
