@@ -1,0 +1,5 @@
+Explain the output of vmprint in terms of Fig 3-4 from the text. What does page 0 contain? What is in page 2? When running in user mode, could the process read/write the memory mapped by page 1? What does the third to last page contain?
+1) Page 0 contains text of the program, because from pte of 0-0-0, we know that its permession is r-xu.
+2) Page 2 is the guard page of the prorgam, because from pte of 0-0-2, we know that its permession is r-x-.
+3) Yes, page 1 has the permission of rw-u.
+4) Third page to the last page is the stack and gaurd page, because their ptes having the permissions of rw-u (stack) excpet that one having rw-- (guard page).

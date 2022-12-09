@@ -75,6 +75,36 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 base, dst;
+  int len;
+  unsigned int bmask = 0; // 32-bit mask
+
+  argaddr(0, &base);
+  argint(1, &len);
+  argaddr(2, &dst);
+
+  if(len<0 || len > 32){
+    printf("len must be in range [0, 32]\n");
+    return -1;
+  }
+
+  pagetable_t ptbl = myproc()->pagetable;
+  base=PGROUNDDOWN(base);
+  for(int i=0; i<len; i++){
+    pte_t * pte = walk(ptbl, base+i*PGSIZE, 0);
+    unsigned int mask = (1<<i);
+    if(*pte & PTE_A){
+      bmask |= mask;
+    }
+
+    // clear PTE_A
+    *pte &= (~(PTE_A));
+  }
+
+  if(copyout(ptbl, dst, (char*)&bmask, sizeof(bmask))<0){
+    return -1;
+  }
+
   return 0;
 }
 #endif
