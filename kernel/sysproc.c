@@ -67,6 +67,7 @@ sys_sleep(void)
     sleep(&ticks, &tickslock);
   }
   release(&tickslock);
+  backtrace();
   return 0;
 }
 
@@ -90,4 +91,53 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_sigalarm(void)
+{
+  int nticks;
+  uint64 hdlr;
+
+  argint(0, &nticks);
+  argaddr(1, &hdlr);
+  
+  struct proc* p = myproc();
+
+  p->nticks=nticks;
+  p->hdlr=hdlr;
+
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc* p = myproc();
+  p->trapframe->ra =p->contextAlarm.ra;
+  p->trapframe->sp=p->contextAlarm.sp;
+  p->trapframe->s0=p->contextAlarm.s0;
+  p->trapframe->s1=p->contextAlarm.s1;
+  p->trapframe->s2=p->contextAlarm.s2;
+  p->trapframe->s3=p->contextAlarm.s3;
+  p->trapframe->s4=p->contextAlarm.s4;
+  p->trapframe->s5=p->contextAlarm.s5;
+  p->trapframe->s6=p->contextAlarm.s6;
+  p->trapframe->s7=p->contextAlarm.s7;
+  p->trapframe->s8=p->contextAlarm.s8;
+  p->trapframe->s9=p->contextAlarm.s9;
+  p->trapframe->s10=p->contextAlarm.s10;
+  p->trapframe->s11=p->contextAlarm.s11;
+  p->trapframe->a0=p->contextAlarm.a0;
+  p->trapframe->a1=p->contextAlarm.a1;
+  p->trapframe->a2=p->contextAlarm.a2;
+  p->trapframe->a3=p->contextAlarm.a3;
+  p->trapframe->a4=p->contextAlarm.a4;
+  p->trapframe->a5=p->contextAlarm.a5;
+  p->trapframe->a6=p->contextAlarm.a6;
+  p->trapframe->a7=p->contextAlarm.a7;
+  p->trapframe->epc=p->contextAlarm.epc;
+  // printf("restore %p\n", p->trapframe->a0);
+  p->hdlrinprocess=0;
+  return 0;
 }

@@ -1,0 +1,43 @@
+1. Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+a0 to a6 contain the arguments. For line 15 in main(), a0 stores the address of "%d %d\n", a1 stores result of f(8)+1 (i.e., 12), a2 stores 13.
+
+2. Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+Call to f in main:
+```
+26:	45b1                	li	a1,12
+```
+In this case, compiler directly inline f(8)+1 to 12.
+
+Call to g in f:
+```
+14:	250d                	addiw	a0,a0,3
+```
+In this case, compiler directly inline g.
+
+3. At what address is the function printf located?
+000000000000064a <printf>.
+Special notice: when main call printf in line 15:
+```
+30:	00000097          	auipc	ra,0x0
+34:	61a080e7          	jalr	1562(ra) # 64a <printf>
+```
+Notice that ra=pc+(0x0<<12) where pc=0x30.
+Thus jalr will jump to 1562(ra)=0x64a.
+
+4. What value is in the register ra just after the jalr to printf in main?
+Return address, which is address of the next line after the jalr.
+
+5. Run the following code.
+
+	unsigned int i = 0x00646c72;
+	printf("H%x Wo%s", 57616, &i);
+      
+What is the output? The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+1) Output: "HE110 World"
+2) If using big-endian, i would be 0x726c6400.
+
+6. In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+
+	printf("x=%d y=%d", 3);
+
+Would be the old value in $a2 for printf.

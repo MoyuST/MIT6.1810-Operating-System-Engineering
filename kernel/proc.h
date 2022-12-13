@@ -18,6 +18,33 @@ struct context {
   uint64 s11;
 };
 
+// Saved registers for kernel context switches.
+struct contextAlarm {
+  uint64 ra;
+  uint64 sp;
+  uint64 s0;
+  uint64 s1;
+  uint64 s2;
+  uint64 s3;
+  uint64 s4;
+  uint64 s5;
+  uint64 s6;
+  uint64 s7;
+  uint64 s8;
+  uint64 s9;
+  uint64 s10;
+  uint64 s11;
+  uint64 a0;
+  uint64 a1;
+  uint64 a2;
+  uint64 a3;
+  uint64 a4;
+  uint64 a5;
+  uint64 a6;
+  uint64 a7;
+  uint64 epc;
+};
+
 // Per-CPU state.
 struct cpu {
   struct proc *proc;          // The process running on this cpu, or null.
@@ -101,7 +128,12 @@ struct proc {
   pagetable_t pagetable;       // User page table
   struct trapframe *trapframe; // data page for trampoline.S
   struct context context;      // swtch() here to run process
+  struct contextAlarm contextAlarm; // Save registers for alarm
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int nticks;                  // Num of ticks to invoke alarm
+  int ticksincelast;           // Num of ticks since last call
+  uint64 hdlr;                 // Handler to invoke for alarm
+  int hdlrinprocess;           // Inidacation of whether handler is running
 };

@@ -77,8 +77,46 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    if(myproc()->nticks>0){
+      ++myproc()->ticksincelast;
+
+      if(p->hdlrinprocess!=1 && p->ticksincelast>=p->nticks){
+        // update alarm status
+        p->ticksincelast=0;
+        p->hdlrinprocess=1;
+
+        // save registers for execution resumption in sigreturn
+        p->contextAlarm.ra=p->trapframe->ra;
+        p->contextAlarm.sp=p->trapframe->sp;
+        p->contextAlarm.s0=p->trapframe->s0;
+        p->contextAlarm.s1=p->trapframe->s1;
+        p->contextAlarm.s2=p->trapframe->s2;
+        p->contextAlarm.s3=p->trapframe->s3;
+        p->contextAlarm.s4=p->trapframe->s4;
+        p->contextAlarm.s5=p->trapframe->s5;
+        p->contextAlarm.s6=p->trapframe->s6;
+        p->contextAlarm.s7=p->trapframe->s7;
+        p->contextAlarm.s8=p->trapframe->s8;
+        p->contextAlarm.s9=p->trapframe->s9;
+        p->contextAlarm.s10=p->trapframe->s10;
+        p->contextAlarm.s11=p->trapframe->s11;
+        p->contextAlarm.a0=p->trapframe->a0;
+        p->contextAlarm.a1=p->trapframe->a1;
+        p->contextAlarm.a2=p->trapframe->a2;
+        p->contextAlarm.a3=p->trapframe->a3;
+        p->contextAlarm.a4=p->trapframe->a4;
+        p->contextAlarm.a5=p->trapframe->a5;
+        p->contextAlarm.a6=p->trapframe->a6;
+        p->contextAlarm.a7=p->trapframe->a7;
+        p->contextAlarm.epc=p->trapframe->epc;
+        // printf("before call %p\n", p->contextAlarm.a0);
+        // set S to hdlr address when alarm invokes
+        p->trapframe->epc=p->hdlr;
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
