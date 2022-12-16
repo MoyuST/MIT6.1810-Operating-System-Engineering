@@ -11,6 +11,9 @@
 
 void freerange(void *pa_start, void *pa_end);
 
+// set up page reference count
+unsigned int pagerefcnt[0x8000];
+
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
 
@@ -27,6 +30,9 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  for(int i=0;i<0x8000;i++){
+    pagerefcnt[i]=1;
+  }
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -50,6 +56,17 @@ kfree(void *pa)
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  unsigned int * refcnt= &pagerefcnt[(((uint64) pa)&(~0x80000000))>>12];
+  if(*refcnt==0){
+    // panic("kfree a page with 0 reference");
+    return;
+  }
+
+  if(--(*refcnt)>0){
+    // printf("no need to freeing %p %d\n", (((uint64) pa)&(~0x80000000)), *refcnt);
+    return;
+  }
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -78,5 +95,8 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
+
+  // increase ref count
+  ++pagerefcnt[(((uint64) r)&(~0x80000000))>>12];
   return (void*)r;
 }

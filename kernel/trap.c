@@ -11,6 +11,9 @@ uint ticks;
 
 extern char trampoline[], uservec[], userret[];
 
+// set up page reference count
+extern unsigned int pagerefcnt[0x8000];
+
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -49,8 +52,9 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
-  if(r_scause() == 8){
+  uint64 scause = r_scause();
+
+  if(scause == 8){
     // system call
 
     if(killed(p))
@@ -65,9 +69,64 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(scause == 15){
+    // store page fault
+
+    uint64 va = PGROUNDDOWN(r_stval());
+    if(va >= MAXVA)
+      goto user_trap_err;
+
+    pte_t * pte = walk(p->pagetable, va, 0);
+
+    if(!pte){
+      goto user_trap_err;
+    }
+
+    // printf("cause pte: %p\n", *pte);
+    if((*pte) & PTE_COW){
+      uint64 pa = PGROUNDDOWN(PTE2PA(*pte));
+      // printf("ref count: %d\n", pagerefcnt[(((uint64) pa)&(~0x80000000))>>12]);
+      if(pagerefcnt[(((uint64) pa)&(~0x80000000))>>12]==1){
+        // directly use the page
+        *pte = ((*pte | PTE_W) & (~PTE_COW));
+      }
+      else{
+        // allocate a new page
+        char *mem;
+        uint64 flags = PTE_FLAGS(*pte);
+
+        if((mem = kalloc()) == 0){
+          uvmunmap(p->pagetable, va, 1, 1);
+          goto user_trap_err;
+        }
+        memmove(mem, (char*)pa, PGSIZE);
+
+        // set write bit
+        flags |= PTE_W;
+        // clear cow bit
+        flags &= (~PTE_COW);
+
+        // decrease page reference count
+        // --pagerefcnt[(((uint64) pa)&(~0x80000000))>>12];
+        kfree((void*) pa);
+
+        // printf("??? %p %p\n", *(walk(p->pagetable, va, 0)), *(walk(p->pagetable, va, 1)));
+
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
+          kfree(mem);
+          uvmunmap(p->pagetable, va, 1, 1);
+          goto user_trap_err;
+        }
+      }
+    }
+    else{
+      goto user_trap_err;
+    }
+
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
+user_trap_err:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);
