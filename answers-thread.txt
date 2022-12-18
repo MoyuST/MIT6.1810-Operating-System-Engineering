@@ -1,0 +1,2 @@
+When multiple threads are applied, they are inserting entries as the child of the same entry. In this case, after one thread finishes inserting (and changes &table[i]), the other thread may modify the &table[i] to its new thread.
+In this case, the previous entry created by the first thread will be lost.
