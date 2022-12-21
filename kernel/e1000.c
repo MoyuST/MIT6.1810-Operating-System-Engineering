@@ -19,7 +19,8 @@ static struct mbuf *rx_mbufs[RX_RING_SIZE];
 // remember where the e1000's registers live.
 static volatile uint32 *regs;
 
-struct spinlock e1000_lock;
+struct spinlock e1000_rxlock;
+struct spinlock e1000_txlock;
 
 // called by pci_init().
 // xregs is the memory address at which the
@@ -29,7 +30,8 @@ e1000_init(uint32 *xregs)
 {
   int i;
 
-  initlock(&e1000_lock, "e1000");
+  initlock(&e1000_rxlock, "e1000_rx");
+  initlock(&e1000_txlock, "e1000_tx");
 
   regs = xregs;
 
@@ -102,7 +104,32 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
+  acquire(&e1000_txlock);
   
+  uint64 txidx = regs[E1000_TDT];
+
+  struct tx_desc * txptr = &tx_ring[txidx];
+
+  // check whether buffer overflowing
+  if(!(txptr->status & E1000_TXD_STAT_DD)){
+    release(&e1000_txlock);
+    return -1;
+  }
+
+  if(tx_mbufs[txidx]){
+    mbuffree(tx_mbufs[txidx]);
+  }
+
+  tx_mbufs[txidx] = m;
+  tx_ring[txidx].addr = (uint64) m->head;
+  tx_ring[txidx].length = m->len;
+
+  tx_ring[txidx].cmd = (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
+
+  regs[E1000_TDT]=(txidx+1)%TX_RING_SIZE;
+
+  release(&e1000_txlock);
+
   return 0;
 }
 
@@ -115,6 +142,29 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  for (;;){
+    uint64 rcidx = ((regs[E1000_RDT]+1)%RX_RING_SIZE);
+    struct rx_desc * rxptr = &rx_ring[rcidx];
+
+    // packet not ready
+    if(!(rxptr->status & E1000_RXD_STAT_DD)){
+      return;
+    }
+
+    rx_mbufs[rcidx]->len = rxptr->length;
+    net_rx(rx_mbufs[rcidx]);
+    rx_mbufs[rcidx] = mbufalloc(0);
+
+
+    if (!rx_mbufs[rcidx])
+        panic("e1000_recv");
+
+    rx_ring[rcidx].addr = (uint64) rx_mbufs[rcidx]->head;
+    rx_ring[rcidx].status = 0;
+
+    regs[E1000_RDT]=rcidx;
+  }
+  
 }
 
 void
@@ -123,7 +173,9 @@ e1000_intr(void)
   // tell the e1000 we've seen this interrupt;
   // without this the e1000 won't raise any
   // further interrupts.
+  acquire(&e1000_rxlock);
   regs[E1000_ICR] = 0xffffffff;
 
   e1000_recv();
+  release(&e1000_rxlock);
 }

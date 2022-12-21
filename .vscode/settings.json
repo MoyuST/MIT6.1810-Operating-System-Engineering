@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.tcc": "c",
+        "fstream": "c",
+        "ostream": "c",
+        "memlayout.h": "c"
+    }
+}
