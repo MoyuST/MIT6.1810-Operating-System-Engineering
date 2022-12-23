@@ -30,8 +30,11 @@ struct {
   // Linked list of all buffers, through prev/next.
   // Sorted by how recently the buffer was used.
   // head.next is most recent, head.prev is least.
-  struct buf head;
+  // struct buf head;
 } bcache;
+
+struct buf buckets[NBUC];
+struct spinlock bucketlock[NBUC];
 
 void
 binit(void)
@@ -40,15 +43,20 @@ binit(void)
 
   initlock(&bcache.lock, "bcache");
 
-  // Create linked list of buffers
-  bcache.head.prev = &bcache.head;
-  bcache.head.next = &bcache.head;
-  for(b = bcache.buf; b < bcache.buf+NBUF; b++){
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
+  for(int i=0; i<NBUC; ++i){
+    initlock(&bucketlock[i], "bcache.bucket");
+    buckets[i].prev = &buckets[i];
+    buckets[i].next = &buckets[i];
+  }
+
+  // chain all free mem to bucket 0
+  for(int i=0; i < NBUF; ++i){
+    b = &bcache.buf[i];
+    b->next = buckets[0].next;
+    b->prev = &buckets[0];
     initsleeplock(&b->lock, "buffer");
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+    buckets[0].next->prev = b;
+    buckets[0].next = b;
   }
 }
 
@@ -60,31 +68,63 @@ bget(uint dev, uint blockno)
 {
   struct buf *b;
 
-  acquire(&bcache.lock);
+  int hashidx = blockno%NBUC;
+
+  acquire(&bucketlock[hashidx]);
 
   // Is the block already cached?
-  for(b = bcache.head.next; b != &bcache.head; b = b->next){
+  for(b = buckets[hashidx].next; b != &buckets[hashidx]; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
-      release(&bcache.lock);
+      release(&bucketlock[hashidx]);
       acquiresleep(&b->lock);
       return b;
     }
   }
 
+  release(&bucketlock[hashidx]);
+
   // Not cached.
-  // Recycle the least recently used (LRU) unused buffer.
-  for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    if(b->refcnt == 0) {
+  for(int i = 0; i<NBUC ; i++){
+    int find = 0;
+    acquire(&bucketlock[i]);
+
+    for(b = buckets[i].next; b != &buckets[i]; b = b->next){
+      if(b->refcnt == 0){
+        find = 1;
+
+        b->next->prev = b->prev;
+        b->prev->next = b->next;
+      }
+
+      if(find){
+        break;
+      }
+    } 
+
+    release(&bucketlock[i]);
+
+    if(find){
       b->dev = dev;
       b->blockno = blockno;
       b->valid = 0;
       b->refcnt = 1;
-      release(&bcache.lock);
+
+      acquire(&bucketlock[hashidx]);
+
+      b->next = buckets[hashidx].next;
+      b->prev = &buckets[hashidx];
+
+      buckets[hashidx].next->prev = b;
+      buckets[hashidx].next = b;
+
+      release(&bucketlock[hashidx]);
+
       acquiresleep(&b->lock);
+
       return b;
     }
-  }
+  }  
   panic("bget: no buffers");
 }
 
@@ -121,33 +161,56 @@ brelse(struct buf *b)
 
   releasesleep(&b->lock);
 
-  acquire(&bcache.lock);
-  b->refcnt--;
-  if (b->refcnt == 0) {
-    // no one is waiting for it.
-    b->next->prev = b->prev;
-    b->prev->next = b->next;
-    b->next = bcache.head.next;
-    b->prev = &bcache.head;
-    bcache.head.next->prev = b;
-    bcache.head.next = b;
+  // since no need to consider 2 process using the same block
+  int hashidx = b->blockno%NBUC;
+  int modify=0;
+
+  while(!modify){
+    acquire(&bucketlock[hashidx]);
+    int curhash = b->blockno % NBUC;
+    if(curhash == hashidx){
+      b->refcnt--;
+      modify = 1;
+    }
+    release(&bucketlock[hashidx]);
+    hashidx = curhash;
   }
-  
-  release(&bcache.lock);
+
+
 }
 
 void
 bpin(struct buf *b) {
-  acquire(&bcache.lock);
-  b->refcnt++;
-  release(&bcache.lock);
+  int hashidx = b->blockno%NBUC;
+  int modify=0;
+
+  while(!modify){
+    acquire(&bucketlock[hashidx]);
+    int curhash = b->blockno % NBUC;
+    if(curhash == hashidx){
+      b->refcnt++;
+      modify = 1;
+    }
+    release(&bucketlock[hashidx]);
+    hashidx = curhash;
+  }
 }
 
 void
 bunpin(struct buf *b) {
-  acquire(&bcache.lock);
-  b->refcnt--;
-  release(&bcache.lock);
+  int hashidx = b->blockno%NBUC;
+  int modify=0;
+
+  while(!modify){
+    acquire(&bucketlock[hashidx]);
+    int curhash = b->blockno % NBUC;
+    if(curhash == hashidx){
+      b->refcnt--;
+      modify = 1;
+    }
+    release(&bucketlock[hashidx]);
+    hashidx = curhash;
+  }
 }
 
 
