@@ -180,3 +180,51 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+void mapfile(struct file * f, char * mem, int offset){
+  printf("off %d\n", offset);
+  ilock(f->ip);
+  readi(f->ip, 0, (uint64) mem, offset, PGSIZE);
+  iunlock(f->ip);
+}
+
+void filewrtiehelper(struct file * f, uint64 addr, uint64 length, int deref){
+  int max = ((MAXOPBLOCKS-1-1-2) / 2) * 1024;
+  int j = 0, r;
+
+  while(j < length){
+    int n1 = length - j;
+    if(n1 > max)
+      n1 = max;
+
+    begin_op();
+    ilock(f->ip);
+    if ((r = writei(f->ip, 1, addr + j, f->off, n1)) > 0)
+      f->off += r;
+    iunlock(f->ip);
+    end_op();
+
+    if(r != n1){
+      // error from writei
+      break;
+    }
+    j += r;
+  }
+
+  if(deref){
+    fileclose(f);
+  }
+  
+}
+
+char checkfile(int mode, struct file* f){
+  int ret;
+  ilock(f->ip);
+  if(mode==0){
+    ret = f->readable;
+  }
+  else{
+    ret = f->writable;
+  }
+  iunlock(f->ip);
+  return ret;
+}

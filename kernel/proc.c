@@ -309,6 +309,16 @@ fork(void)
   np->cwd = idup(p->cwd);
 
   safestrcpy(np->name, p->name, sizeof(p->name));
+  memmove(&np->vma, &p->vma, sizeof(p->vma));
+
+  for(int i=0;i<VMASIZE;i++){
+    if(p->vma[i].free==0){
+      continue;
+    }
+    
+    
+    filedup(p->vma[i].f);
+  }
 
   pid = np->pid;
 
@@ -340,6 +350,8 @@ reparent(struct proc *p)
   }
 }
 
+extern uint64 munmap(uint64 addr, int length, int do_free, char locked);
+
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
 // until its parent calls wait().
@@ -357,6 +369,12 @@ exit(int status)
       struct file *f = p->ofile[fd];
       fileclose(f);
       p->ofile[fd] = 0;
+    }
+  }
+
+  for(int i=0;i<VMASIZE;i++){
+    if(p->vma[i].free){
+      munmap(p->vma[i].addr, p->vma[i].length, 1, 0);
     }
   }
 
