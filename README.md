@@ -17,6 +17,9 @@ I just realize there is a long way to go for me to study computer science more t
 ### labs result:
 
 Basically I just passed and get full marks of all the `make grade` tests. However, the `make grade` labs might failed occasionall. Also, I did these labs on my virtual machines on my WIN 10 pc. My machine was quite old and its computing power might be not that strong, so for some labs, I modified the test time to allow my computer finishing the test. For lab 10 (mmap), it was quite complicated than my expectation, thus I did not reserve that much time to do it. So in lab 10, my codes was quite rude and straight-forward. Also, I might omit some potential bugs. Nevertheless, I still got full marks of that test. 
+
+Notice that the each solution to the lab is put in a separate branch.
+
 If you find any bugs, please feel free to remind me or fix them, I would be very grateful 😁.
 
 1. utilities
