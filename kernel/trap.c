@@ -5,7 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -50,10 +49,8 @@ usertrap(void)
   
   // save user program counter.
   p->trapframe->epc = r_sepc();
-
-  uint64 scause = r_scause();
-
-  if(scause == 8){
+  
+  if(r_scause() == 8){
     // system call
 
     if(killed(p))
@@ -68,71 +65,9 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if (scause == 13 || scause == 15) {
-    // handling load (13) and store (15) fault
-
-
-    uint64 va = r_stval();
-    va = PGROUNDDOWN(va);
-
-    int i=0;
-
-    for(;i<VMASIZE;i++){
-      if(p->vma[i].free == 0){
-        continue;
-      }
-
-      // find target address
-      if(va>=p->vma[i].addr && (va-p->vma[i].addr<=p->vma[i].length)){
-        break;
-      }
-    }
-
-    // access unmapped address
-    if(i==VMASIZE){
-      goto user_trap_err;
-    }
-
-    // pte_t * pte = walk(p->pagetable, va, 0);
-    // uint64 flags = PTE_FLAGS(*pte);
-    
-    uint64 flags = PTE_U | PTE_V;
-
-    if(p->vma[i].prot & PROT_READ){
-      // if(!checkfile(0, p->vma[i].f)){
-      //   goto user_trap_err;
-      // }
-      flags |= PTE_R;
-    }
-    
-    if(p->vma[i].prot & PROT_WRITE){
-      // if(!checkfile(1, p->vma[i].f)){
-      //   goto user_trap_err;
-      // }
-      flags |= PTE_W;
-    }
-
-    char *mem;
-
-    if((mem = kalloc()) == 0){
-      goto user_trap_err;
-    }
-
-    memset((char*)mem, 0, PGSIZE);
-
-    mapfile(p->vma[i].f,  mem, p->vma[i].offset+va-p->vma[i].addr);
-
-    printf("hit vma %p\n", va);
-    if(mappages(p->pagetable, va, PGSIZE, (uint64) mem, flags)!=0){
-      kfree(mem);
-      goto user_trap_err;
-    }
-
-  } 
-  else if((which_dev = devintr()) != 0){
+  } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-user_trap_err:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);

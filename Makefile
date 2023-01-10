@@ -106,7 +106,7 @@ endif
 
 ifdef KCSAN
 CFLAGS += -DKCSAN
-KCSANFLAG = -fsanitize=thread -fno-inline
+KCSANFLAG = -fsanitize=thread
 endif
 
 # Disable PIE when possible (for Ubuntu 16.10 toolchain)
@@ -188,7 +188,7 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-	$U/_mmaptest\
+
 
 
 
